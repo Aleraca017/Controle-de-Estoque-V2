@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css" integrity="sha512-Evv84Mr4kqVGRNSgIGL/F/aIDqQb7xQ2vcrdIwxfjThSH8CSR7PBEakCr51Ck+w+/U6swU2Im1vVX0SVk9ABhg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Controle de Estoque</title>
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.10.0/firebase-app.js';
+        import { getAuth, onAuthStateChanged, signOut } from 'https://www.gstatic.com/firebasejs/9.10.0/firebase-auth.js';
+        import { getFirestore, collection, doc, getDocs, addDoc, updateDoc, deleteDoc, serverTimestamp, setDoc, getDoc } from 'https://www.gstatic.com/firebasejs/9.10.0/firebase-firestore.js';
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyBii-bN0G5xFcuo2VJ9FUx-Tu9M593FNIQ",
+            authDomain: "controle-de-estoque-v2.firebaseapp.com",
+            projectId: "controle-de-estoque-v2",
+            storageBucket: "controle-de-estoque-v2.firebasestorage.app",
+            messagingSenderId: "392518954617",
+            appId: "1:392518954617:web:5eb24ae459fd66a8ea6ea8"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+
+        function loadUserData(user) {
+    if (user) {
+        // Referência ao Firestore
+        const userRef = doc(db, 'users', user.uid);
+
+        // Buscar o nome do usuário no Firestore
+        getDoc(userRef).then(docSnap => {
+            if (docSnap.exists()) {
+                const nome = docSnap.data().nome; // Recupera o nome do campo 'nome'
+                const genero = docSnap.data().genero; //recupera genero
+                if(genero === 'fem'){
+                    document.getElementById('greeting').innerHTML = `Bem-vinda, <br> ${nome} ❤️`;
+                } else {
+                    document.getElementById('greeting').innerHTML = `Bem-vindo, ${nome} ❤️`;
+                }
+                
+            } else {
+                // Caso o documento não exista, usa o displayName ou email
+                document.getElementById('greeting').innerHTML = `Bem-vindo, ${user.displayName || user.email} ❤️`;
+            }
+            loadUserLists(user.uid);
+        }).catch(error => {
+            console.error("Erro ao recuperar nome: ", error);
+            document.getElementById('greeting').innerHTML = `Bem-vindo, ${user.displayName || user.email} ❤️`;
+            loadUserLists(user.uid);
+        });
+    } else {
+        window.location.href = 'login.html';
+    }
+}
+
+        async function loadUserLists(userId) {
+            const listSelector = document.getElementById('listSelector');
+            listSelector.innerHTML = ''; 
+            const userListsRef = collection(db, 'users', userId, 'listas');
+            const snapshot = await getDocs(userListsRef);
+            
+            if (snapshot.empty) {
+                const option = document.createElement('option');
+                option.value = '';
+                option.innerText = 'Nenhuma lista encontrada';
+                listSelector.appendChild(option);
+            } else {
+                snapshot.forEach(doc => {
+                    const option = document.createElement('option');
+                    option.value = doc.id;
+                    option.innerText = doc.id;
+                    listSelector.appendChild(option);
+                });
+            }
+
+            const selectedList = listSelector.value;
+            if (selectedList) {
+                loadItemsFromList(userId, selectedList);
+            }
+        }
+
+       
+
+        onAuthStateChanged(auth, (user) => {
+            loadUserData(user);
+        });
+
+        async function createNewList(userId, listName) {
+            const listsRef = collection(db, 'users', userId, 'listas');
+            const newListRef = doc(listsRef, listName);
+            await setDoc(newListRef, { createdAt: serverTimestamp() });
+            loadUserLists(userId);
+            document.location.reload();
+        }
+
+        async function addItemToList(userId, listName, itemName, itemQuantity, itemDate) {
+            const listRef = collection(db, 'users', userId, 'listas', listName, 'itens');
+            const querySnapshot = await getDocs(listRef);
+            let itemExists = false;
+            let existingItemId = null;
+            
+            querySnapshot.forEach(doc => {
+                const item = doc.data();
+                if (item.name === itemName) {
+                    itemExists = true;
+                    existingItemId = doc.id;
+                }
+            });
+
+            if (itemExists) {
+                const itemRef = doc(db, 'users', userId, 'listas', listName, 'itens', existingItemId);
+                const docSnapshot = await getDoc(itemRef);
+                const currentQuantity = docSnapshot.data().quantity;
+                const newQuantity = currentQuantity + itemQuantity;
+
+                await updateDoc(itemRef, { quantity: newQuantity });
+                loadItemsFromList(userId, listName);
+            } else {
+                await addDoc(listRef, {
+                    name: itemName,
+                    quantity: itemQuantity,
+                    date: itemDate,
+                    createdAt: serverTimestamp()
+                });
+                loadItemsFromList(userId, listName);
+                alert('Item adicionado com sucesso!');
+            }
+        }
+
+        async function loadItemsFromList(userId, listName) {
+            const itemsList = document.getElementById('itemsList');
+            itemsList.innerHTML = '';
+            const itemsRef = collection(db, 'users', userId, 'listas', listName, 'itens');
+            const snapshot = await getDocs(itemsRef);
+            snapshot.forEach(doc => {
+                const item = doc.data();
+                const itemDate = item.date || 'Data não definida';
+                const formattedDate = itemDate.split('-').reverse().join('/');
+
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td class="border px-4 py-2">${item.name}</td>
+                    <td class="border px-4 py-2 w-16">
+                        <div class="flex items-center justify-between w-full">
+                            <div class=' w-full'>
+                            ${item.quantity}
+                            </div>
+                        <div class='ml-5'>
+                        <button data-action="increase" data-item-id="${doc.id}" class="action-button w-full sm:w-10 bg-green-500 text-white py-1 px-4 rounded mb-1 hover:bg-green-600">+</button>
+                        <button data-action="decrease" data-item-id="${doc.id}" class="action-button w-full sm:w-10 bg-orange-500 text-white py-1 px-4 rounded mt-1 hover:bg-orange-600">-</button>
+                        </div>
+                        </div>
+                    </td>
+                    <td class="border px-4 py-2">${formattedDate}</td>
+                    <td class="border px-2 w-80 py-10 flex justify-around">
+                        <button data-action="edit" data-item-id="${doc.id}" class="action-button w-32 sm:w-20 bg-yellow-500 text-white py-1 px-4 rounded hover:bg-yellow-600">Editar</button>
+                        <button data-action="delete" data-item-id="${doc.id}" class="action-button w-32 sm:w-20 bg-red-500 text-white py-1 px-4 rounded hover:bg-red-600">Excluir</button>
+                    </td>
+                `;
+                itemsList.appendChild(row);
+            });
+        }
+
+        function logout() {
+            signOut(auth).then(() => {
+                window.location.href = 'login.html';
+            }).catch((error) => {
+                console.error('Erro ao sair: ', error);
+            });
+        }
+
+        function toggleTheme() {
+            document.body.classList.toggle('dark');
+        }
+
+        document.getElementById('themeToggle').addEventListener('click', toggleTheme)
+
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('logout').addEventListener('click', logout);
+
+            document.getElementById('createListButton').addEventListener('click', () => {
+                const listName = prompt('Digite o nome da nova lista:');
+                if (listName) {
+                    const userId = auth.currentUser.uid;
+                    createNewList(userId, listName);
+                }
+            });
+
+            document.getElementById('listSelector').addEventListener('change', () => {
+    const userId = auth.currentUser.uid;
+    const selectedList = document.getElementById('listSelector').value;
+    if (selectedList) {
+        loadItemsFromList(userId, selectedList);
+    }
+});
+
+            document.getElementById('submitItem').addEventListener('click', () => {
+                const itemName = document.getElementById('itemName').value;
+                const itemQuantity = parseInt(document.getElementById('itemQuantity').value);
+                const itemDate = document.getElementById('itemDate').value || new Date().toISOString().split('T')[0];
+                const userId = auth.currentUser.uid;
+                const listName = document.getElementById('listSelector').value;
+                if (itemName && !isNaN(itemQuantity) && listName) {
+                    addItemToList(userId, listName, itemName, itemQuantity, itemDate);
+                    alert('Item adicionado com sucesso!');
+                    document.getElementById('itemName').value = '';
+                    document.getElementById('itemQuantity').value = '';
+                    document.getElementById('itemDate').value = new Date().toISOString().split('T')[0];
+                }
+            });
+
+            document.getElementById('itemsList').addEventListener('click', (event) => {
+                const action = event.target.dataset.action;
+                const itemId = event.target.dataset.itemId;
+                const row = event.target.closest('tr');
+                const itemName = row.querySelector('td:nth-child(1)').textContent;
+                const itemQuantity = parseInt(row.querySelector('td:nth-child(2)').textContent);
+                const itemDate = row.querySelector('td:nth-child(3)').textContent;
+
+                const userId = auth.currentUser.uid;
+                const listName = document.getElementById('listSelector').value;
+
+                if (action === 'edit') {
+                    editItem(userId, listName, itemId, itemName, itemQuantity, itemDate);
+                } else if (action === 'delete') {
+                    deleteItem(userId, listName, itemId);
+                } else if (action === 'increase') {
+                    addItemToList(userId, listName, itemName, 1, itemDate);
+                } else if (action === 'decrease') {
+                    addItemToList(userId, listName, itemName, -1, itemDate);
+                }
+            });
+        });
+
+        async function deleteList(userId, listName) {
+    const confirmDelete = confirm('Tem certeza de que deseja excluir esta lista? Esta ação não pode ser desfeita.');
+    if (confirmDelete) {
+        const listRef = doc(db, 'users', userId, 'listas', listName);
+        await deleteDoc(listRef);
+        alert('Lista excluída com sucesso!');
+        loadUserLists(userId); // Recarrega as listas do usuário após exclusão
+    }
+}
+
+document.getElementById('deleteListButton').addEventListener('click', () => {
+    const userId = auth.currentUser.uid;
+    const listName = document.getElementById('listSelector').value;
+    if (listName) {
+        deleteList(userId, listName);
+    } else {
+        alert('Selecione uma lista para excluir!');
+    }
+});
+
+async function deleteItem(userId, listName, itemId) {
+            const itemRef = doc(db, 'users', userId, 'listas', listName, 'itens', itemId);
+            await deleteDoc(itemRef);
+            loadItemsFromList(userId, listName);
+        }
+
+        async function editItem(userId, listName, itemId, currentName, currentQuantity, currentDate) {
+    // Preencher os campos de adição com os dados atuais
+    document.getElementById('itemName').value = currentName;
+    document.getElementById('itemQuantity').value = currentQuantity;
+    document.getElementById('itemDate').value = currentDate.split('/').reverse().join('-');  // Ajustando para o formato YYYY-MM-DD
+
+    // Alterar o comportamento do botão de adicionar item para atualizar o item no banco de dados
+    document.getElementById('submitItem').onclick = async () => {
+        const newName = document.getElementById('itemName').value;
+        const newQuantity = parseInt(document.getElementById('itemQuantity').value);
+        const newDate = document.getElementById('itemDate').value;
+
+        if (newName && !isNaN(newQuantity) && newDate) {
+            // Atualizar item no Firestore
+            const itemRef = doc(db, 'users', userId, 'listas', listName, 'itens', itemId);
+            await updateDoc(itemRef, {
+                name: newName,
+                quantity: newQuantity,
+                date: newDate  // Salvando a data no formato YYYY-MM-DD
+            });
+
+            // Atualizando a lista de itens na tela
+            loadItemsFromList(userId, listName);
+            
+            // Resetar o comportamento do botão
+            alert('Item atualizado com sucesso!');
+            document.getElementById('itemName').value = '';
+            document.getElementById('itemQuantity').value = '';
+            document.getElementById('itemDate').value = new Date().toISOString().split('T')[0]; // Resetando a data
+        }
+    };
+}
+
+// Funções para importar e exportar itens via CSV
+
+// Função para exportar itens para CSV
+async function exportarItensCSV() {
+    const userId = auth.currentUser.uid;
+    const listName = document.getElementById('listSelector').value;
+    if (!listName) {
+        alert('Selecione uma lista antes de exportar.');
+        return;
+    }
+
+    let csvContent = 'data:text/csv;charset=utf-8,Nome,Quantidade,Data de Cadastro\n';
+
+    const itemsRef = collection(db, 'users', userId, 'listas', listName, 'itens');
+    const snapshot = await getDocs(itemsRef);
+    
+    snapshot.forEach(doc => {
+        const item = doc.data();
+        const nome = item.name;
+        const quantidade = item.quantity;
+        const dataCadastro = item.date || 'Data não definida';
+        const formattedDate = dataCadastro.split('-').reverse().join('/');
+
+        csvContent += `${nome},${quantidade},${formattedDate}\n`;
+    });
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', 'estoque.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+// Função para importar itens via CSV
+async function importarItensCSV(file) {
+    const userId = auth.currentUser.uid; // Pegando o ID do usuário atual
+    const listName = document.getElementById('listSelector').value; // Pegando o nome da lista selecionada
+    const itemsRef = collection(db, 'users', userId, 'listas', listName, 'itens');
+
+    const reader = new FileReader();
+
+    reader.onload = async (event) => {
+        const text = event.target.result;
+        const lines = text.split('\n').slice(1); // Remove o cabeçalho
+
+        for (const line of lines) {
+            if (!line.trim()) continue; // Ignora linhas vazias
+
+            const [nome, quantidade, dataCadastro] = line.split(','); // Divide cada linha do CSV em suas colunas
+
+            // Verifica se os dados estão presentes
+            if (nome && quantidade && dataCadastro) {
+                const formattedDate = dataCadastro.split('/').reverse().join('-'); // Converte a data para o formato correto (YYYY-MM-DD)
+                
+                // Adiciona o item ao Firestore
+                await addDoc(itemsRef, {
+                    name: nome.trim(),
+                    quantity: parseInt(quantidade.trim()), // Converte a quantidade para um número
+                    date: formattedDate,
+                    createdAt: serverTimestamp() // Adiciona a data de criação
+                });
+            }
+        }
+
+        alert('Importação concluída com sucesso!');
+        loadItemsFromList(userId, listName); // Recarrega a lista de itens após a importação
+    };
+
+    reader.readAsText(file); // Lê o arquivo CSV como texto
+}
+// Adicionando os Event Listeners para os elementos HTML
+
+document.getElementById('botaoExportar').addEventListener('click', exportarItensCSV);
+document.getElementById('inputImportar').addEventListener('change', (e) => importarItensCSV(e.target.files[0]));
+
+
+    </script>
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <script>
+     
+    </script>
+
+<style>
+    .dark {
+        background-color: #2d2d2d !important;
+        color: white;
+    }
+    .dark input, .dark select{
+        background-color: #2d2d2d;
+    }
+    .dark .bg-white {
+        background-color: #333;
+    }
+    .dark .bg-gray-100 {
+        background-color: #444;
+    }
+    .dark .border {
+        border-color: #555;
+    }
+    .dark .bg-blue-500 {
+        background-color: #1d4ed8;
+    }
+    .dark .bg-red-500 {
+        background-color: #ef4444;
+    }
+
+    /* Ajustes específicos para responsividade */
+    @media (max-width: 768px) {
+        .action-button {
+            width: auto;
+            padding: 0.5rem 1rem;
+        }
+        .w-full {
+            width: 100%;
+        }
+        .sm\:w-20 {
+            width: 100%;
+        }
+        .sm\:w-10 {
+            width: 50%;
+        }
+    }
+
+    @media (max-width: 480px) {
+        /* Reduzir tamanhos de fonte em dispositivos móveis */
+        .text-base {
+            font-size: 0.875rem; /* 14px */
+        }
+        .text-lg {
+            font-size: 1rem; /* 16px */
+        }
+        .p-4 {
+            padding: 1rem;
+        }
+    }
+    </style>
+</head>
+    <script>
+        function exibeAdicao(){
+            document.getElementById('camposItens').classList.toggle('hidden');
+            document.querySelector('#adicionarItens i').classList.toggle('fa-caret-down')
+            document.querySelector('#adicionarItens i').classList.toggle('fa-caret-up')
+        }
+    </script>
+<body class="bg-gray-100 p-5">
+
+    <div class="max-w-4xl mx-auto bg-white p-6 rounded-lg shadow-md">
+
+        <!-- Header Section -->
+        <div class="flex items-center justify-between mb-4 flex-wrap">
+            <h1 class="text-2xl font-semibold w-full md:w-auto mb-5" id="greeting"></h1>
+            <div class="flex flex-wrap gap-2 w-full md:w-auto">
+                <button id="logout" class="bg-red-500 text-white py-1 px-4 rounded w-full sm:w-auto hover:bg-red-600">Sair</button>
+                <button id="themeToggle" class="bg-gray-700 text-white py-1 px-4 rounded mt-4 sm:mt-0 w-full sm:w-auto hover:bg-gray-800">Alternar Tema</button>
+            </div>
+        </div>
+
+        <hr>
+
+        <!-- Lists Section -->
+        <div class="mt-6 mb-4">
+            <div class="flex items-center justify-between flex-wrap">
+                <h1 class="text-xl font-semibold w-full sm:w-auto">Listas 📋</h1>
+                <button id="createListButton" class="bg-blue-500 text-white py-2 px-4 rounded w-full sm:w-auto mt-4 sm:mt-0 hover:bg-blue-600">Criar Nova Lista</button>
+            </div>  
+            <select id="listSelector" class="mt-2 mb-4 p-2 border rounded-md w-full sm:w-full">
+                <option value="">Selecione uma lista</option>
+            </select>
+
+            <div class="flex items-center justify-center w-full">
+                <button id="deleteListButton" class="bg-red-500 text-white py-2 px-4 rounded mt-4 w-full sm:w-auto hover:bg-red-600">
+                    Excluir Lista Atual
+                </button>
+            </div>
+        </div>
+
+        <hr>
+
+        <!-- Add Item Section -->
+        <div class="mt-6 mb-4">
+            <h2 class="text-xl font-semibold cursor-pointer" id="adicionarItens" onclick="exibeAdicao()">Adicionar / Editar Item <i class="fa-solid fa-caret-down"></i></h2>
+            <div id="camposItens" class="hidden">
+                <input type="text" id="itemName" class="mt-2 p-2 border rounded-md w-full" placeholder="Nome do item" />
+                <input type="number" id="itemQuantity" class="mt-2 p-2 border rounded-md w-full" placeholder="Quantidade" />
+                <input type="date" id="itemDate" class="mt-2 p-2 border rounded-md w-full" />
+                <button id="submitItem" class="bg-green-500 text-white py-1 px-4 rounded mt-4 hover:bg-green-600">Adicionar Item</button>
+            </div>
+        </div>
+
+        <hr>
+
+        <!-- Items Table Section -->
+        <div class="mt-6">
+            <h2 class="text-xl font-semibold">Itens na Lista</h2>
+            <div class="overflow-x-auto mt-2">
+                <table class="min-w-full table-auto border-collapse">
+                    <thead>
+                        <tr>
+                            <th class="border px-4 py-2">Nome</th>
+                            <th class="border px-4 py-2">Quantidade</th>
+                            <th class="border px-4 py-2">Data</th>
+                            <th class="border px-4 py-2 w-80">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody id="itemsList">
+                        <!-- Itens serão inseridos aqui dinamicamente -->
+                    </tbody>
+                </table>
+                <br>
+            </div>
+        </div>
+
+        <hr>
+                <!-- Input para Importação -->
+                <div class="flex items-center mt-5">
+                    <h1><strong>Importação/Exportação</strong></h1><i class="fa-solid fa-file-csv fa-xl ml-2"></i>
+                </div>
+                <div class="flex items-center flex-wrap gap-3">
+                    <button id="botaoExportar" class="bg-stone-500 text-white py-1 px-4 rounded mt-3 w-full hover:bg-stone-600">Exportar Itens para CSV</button>
+                    <!-- Input escondido -->
+                    <input type="file" id="inputImportar" accept=".csv" class="hidden" />
+                    
+                    <!-- Botão estilizado -->
+                    <label for="inputImportar" class="px-4 py-1 mt-3 bg-emerald-800 text-center text-white rounded w-full cursor-pointer hover:bg-emerald-600 transition-colors">
+                        Inserir Arquivo CSV
+                    </label>
+                </div>
+
+    </div>
+
+</body>
+
+</html>

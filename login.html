@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login</title>
+    <!-- Importando Firebase com a versão modular -->
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.10.0/firebase-app.js';
+        import { getAuth, signInWithEmailAndPassword, sendPasswordResetEmail, GoogleAuthProvider, signInWithPopup } from 'https://www.gstatic.com/firebasejs/9.10.0/firebase-auth.js';
+
+        // Configuração do Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyBii-bN0G5xFcuo2VJ9FUx-Tu9M593FNIQ",
+            authDomain: "controle-de-estoque-v2.firebaseapp.com",
+            projectId: "controle-de-estoque-v2",
+            storageBucket: "controle-de-estoque-v2.firebasestorage.app",
+            messagingSenderId: "392518954617",
+            appId: "1:392518954617:web:5eb24ae459fd66a8ea6ea8"
+        };
+
+        // Inicializando o Firebase
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+
+        const googleLoginButton = document.getElementById('google-login');
+
+        // Função para realizar o login
+        async function loginUser() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+
+            try {
+                await signInWithEmailAndPassword(auth, email, password);
+                window.location.href = 'index.html'; // Redireciona para a página principal após o login
+            } catch (error) {
+                const errorCode = error.code;
+                const errorMessage = error.message;
+                if(errorMessage === 'Firebase: Error (auth/invalid-email).'){
+                    alert('E-Mail inválido')
+                } else if(errorMessage === 'Firebase: Error (auth/invalid-login-credentials).'){
+                    alert('Credenciais invalidas, se esqueceu sua senha use o botão de recuperação ou contate o suporte')
+                }
+            }
+        }
+
+        // Função para login com Google
+        googleLoginButton.addEventListener('click', () => {
+          const provider = new GoogleAuthProvider();
+          signInWithPopup(auth, provider)
+            .then((result) => {
+              // Login com Google bem-sucedido
+              const user = result.user;
+              alert('Login com Google realizado com sucesso!');
+              console.log(user);
+
+              // Redirecionando para a página de administração
+              window.location.href = 'adm.html';  // Aqui ocorre o redirecionamento
+            })
+            .catch((error) => {
+              const errorMessage = error.message;
+              if (errorMessage === 'Firebase: Error (auth/admin-restricted-operation).') {
+                alert('Não é possível criar usuários sem ter o login no sistema, favor contate o suporte e solicite a criação do usuário')
+              } else {
+                alert('Erro: ' + errorMessage);
+              }
+            });
+        });
+
+        // Função para resetar a senha
+        async function resetPassword() {
+            const email = document.getElementById('email').value;
+            if (email === "") {
+                alert("Por favor, insira seu email.");
+                return;
+            }
+
+            try {
+                await sendPasswordResetEmail(auth, email);
+                alert("Se o email informado existir na base de dados, você receberá um link para resetar sua senha.");
+            } catch (error) {
+                const errorMessage = error.message;
+                alert(`Erro: ${errorMessage}`);
+            }
+        }
+
+        // Definindo o botão de login para executar a função loginUser
+        document.getElementById('loginButton').addEventListener('click', loginUser);
+        // Definindo o botão de resetar senha
+        document.getElementById('resetPassword').addEventListener('click', resetPassword);
+    </script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-sky-50 h-screen flex flex-col justify-around items-center">
+
+    <div class="flex justify-center items-center h-full">
+        <div class="bg-white p-8 rounded shadow-lg w-96">
+            <h1 class="text-3xl font-bold text-center mb-6">Login</h1>
+            
+            <!-- Formulário de login -->
+            <div>
+                <input type="email" id="email" placeholder="Email" class="border p-2 mb-4 w-full" required />
+                <input type="password" id="password" placeholder="Senha" class="border p-2 mb-4 w-full" required />
+                <button id="loginButton" class="bg-blue-500 text-white py-2 px-4 w-full rounded">Entrar</button>
+            </div>
+
+            <!-- Botão de Login com Google -->
+            <button id="google-login" class="w-full mt-1 flex-1 bg-white border border-gray-300 text-gray-600 p-3 rounded-lg hover:bg-gray-100 transition-colors flex items-center justify-center space-x-2">
+                <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" class="w-5 h-5">
+                <span>Google</span>
+            </button>
+
+            <!-- Link para resetar a senha -->
+            <div class="mt-4 text-center flex items-center justify-between">
+                <button id="resetPassword" class="text-blue-500">Esqueceu a senha?</button>
+                <a href='mailto:alexandremir017@icloud.com?subject=Solicitação de suporte do app (Controle de Estoque)&amp;body=Gostaria de solicitar o suporte para a aplicação de controle de estoque pelos motivos de:' target="_blank" class="text-red-700">Suporte</a>
+            </div>
+            
+        </div>
+    </div>
+
+    <footer class="flex items-center justify-end flex-col">
+        <h1>Desenvolvido por <a class="text-purple-500" href="https://linktr.ee/017_us" target="_blank">Alexandre Miranda</a></h1>
+    </footer>
+
+</body>
+</html>
